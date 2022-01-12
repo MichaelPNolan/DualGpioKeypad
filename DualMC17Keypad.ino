@@ -16,8 +16,8 @@
 
 //#include "MIDIUSB.h"   if i want to use a USB enabled controller - future use
 
-#define MIDI_SERIAL_MODE
-
+//#define MIDI_SERIAL_MODE
+long counter = 0;
 
 void setup(){
   #ifdef MIDI_SERIAL_MODE    
@@ -36,7 +36,24 @@ void setup(){
   
 void loop(){
  //serviceKeyboardMatrix();
- processLEDplex();
+ if(counter > 12000){
+   
+   ledAllOff();
+   for(int i=0;i<10;i++)
+     ledMatrixOn(random(40));
+
+   //ledMatrixOff(random(40));
+   counter = 0;
+ } else {
+   counter++; 
+   //delay(1);
+ }
+ if(counter % 20)
+   processLEDplex();
+// if(counter%2000)
+  //  ledMatrixOff(random(40));
+
+ 
 }
 
 void playMIDINote(byte channel, byte note, byte velocity)
