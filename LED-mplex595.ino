@@ -23,9 +23,15 @@
 #define dataPin A2
 
 //looping variables
-static byte i;
+byte plexRow;
+byte i;
 byte j;
 byte x;
+bool sweepEffect, KnightRider, KR2;
+byte sweepInc;
+
+
+
 short ledRows[4]; //hold 4 binary maps of leds on/off to use per scan
 //storage variable
 byte dataToSend[2];
@@ -35,41 +41,154 @@ void setupLEDplex() {
   pinMode(latchPin, OUTPUT);
   pinMode(clockPin, OUTPUT);
   pinMode(dataPin, OUTPUT);
+  noInterrupts();
+  TCCR1A = 0;
+  TCCR1B = 0;
+  timer1_counter = 65011;
+  TCNT1 = timer1_counter;   // preload timer
+  TCCR1B |= (1 << CS12);    // 256 prescaler 
+  TIMSK1 |= (1 << TOIE1);
+
+  interrupts();
   ledAllOff();
-}
-void ledAllOff(){
-    for (i=0;i < 4;i++){
-      ledRows[i] = 0;
-  }
-}
-void ledMatrixOn(byte x){
-      j = x / 4;
-      i = x % 4;
-      ledRows[i] |= (1 << j+2);
+  sweepEffect = false;
+  KnightRider = false;
+  KR2 = false;
+  plexRow = 0;
 }
 
-void ledMatrixOff(byte x){
+ISR(TIMER1_OVF_vect)        // interrupt service routine 
+{
+   TCNT1 = timer1_counter;   // preload timer
+  
+   plexRow++;
+   if(plexRow > 3)
+     plexRow = 0;
+   if(ledRows[plexRow]){ //light all the columns set for this row
+     dataToBuild =  (1 << (plexRow+12)) | (4092 & ~ledRows[plexRow]);
+     dataToSend[1] = (byte)(dataToBuild & 0xff);  //convert short into two bytes
+     dataToSend[0] = (byte)((dataToBuild >> 8) & 0xff);
+   }
+    digitalWrite(latchPin, LOW);
+    // shift out the bits of dataToSend to the 74HC595
+    shiftOut(dataPin, clockPin, LSBFIRST, dataToSend[1]);
+   // digitalWrite(latchPin, HIGH);
+   // digitalWrite(latchPin, LOW);
+    shiftOut(dataPin, clockPin, LSBFIRST, dataToSend[0]);
+    //set latch pin high- this sends data to outputs so the LEDs will light up
+    digitalWrite(latchPin, HIGH);
+}
+
+void effects(){
+  
+  if(sweepEffect)
+  {
+     if(sweepInc >39){
+       sweepEffect = false;
+       ledAllOff();
+     }
+     ledMatrixOn(sweepInc);
+     ledMatrixOn(sweepInc+1);
+     if(sweepInc>0)
+       ledMatrixOff(sweepInc-1);
+     sweepInc++;
+  }
+
+  if(KnightRider){
+
+     if((sweepInc >1)&& (sweepInc<19)){
+       ledMatrixOff(19+sweepInc);
+       ledMatrixOff(20-sweepInc);
+     }
+     if(sweepInc >19){
+       ledMatrixOff(68-sweepInc);
+       ledMatrixOff(sweepInc-19);
+     }
+     sweepInc++;
+     if(sweepInc <19){
+       ledMatrixOn(20+sweepInc);
+       ledMatrixOn(21-sweepInc);
+     }
+     if(sweepInc >=19){
+       ledMatrixOn(68-sweepInc);
+       ledMatrixOn(sweepInc-19);
+     }
+  
+     if(sweepInc >42){
+       KnightRider = false;
+       ledAllOff();
+    }
+  }
+}
+
+void sweepEffectStart(){
+  sweepEffect = true;
+  sweepInc = 1;
+}
+void KnightRiderStart(){
+  KnightRider = true;
+  sweepInc = 1;
+}
+
+void ledAllOff(){  //clear all the column bits in all the rows
+    for (i=0;i < 4;i++){
+      ledRows[i] = (short)0;
+      //printBinShort(ledRows[i]);
+     //Serial.println();
+  }
+
+}
+void ledMatrixOn(byte x){ //set the bit for this column j in the correct row i
+  if(x < 41){
+    if(x < 4)
+      j = 0;
+    else
       j = x / 4;
-      i = x % 4;
-      ledRows[i] &= (0 << j+2);
+    i = x % 4;
+    ledRows[i] |= (1 << j+2);
+  }
+ /* Serial.print(x);
+  Serial.print(" on i=");
+  Serial.print(i);
+  Serial.print(" j=");
+  Serial.print(j);
+  Serial.print(" "); */
+}
+
+void ledMatrixOff(byte x){ //clear the bit for this column j in the correct row i
+  if(x < 41){
+    if(x < 4)
+      j = 0;
+    else
+      j = x / 4;
+    i = x % 4;
+    ledRows[i] &= (0 << j+2);
+  }
+  //Serial.print(x);
+  //Serial.println(" off ");
 }
 void processLEDplex() {
-   i++;
-   if(i > 3)
-     i = 0;
-  
+    //each time we are called process a different row - multiplexing
+   plexRow++;
+   if(plexRow > 3)
+     plexRow = 0;
+   
       //bit manipulation (more info at http://arduino.cc/en/Reference/Bitshift ,  http://arduino.cc/en/Reference/BitwiseXorNot , and http://arduino.cc/en/Reference/BitwiseAnd)
        //
        //dataToBuild =  (1 << (i+12)) | (4092 & ~(1 << j+2)); //there are 10 lines to fit into 12 bits of the j (cols) and 4 bits in the least bits (rows)
-   if(ledRows[i]){
-     dataToBuild =  (1 << (i+12)) | (4092 & ~ledRows[i]);
-     dataToSend[1] = (byte)(dataToBuild & 0xff);
+   if(ledRows[plexRow]){ //light all the columns set for this row
+     dataToBuild =  (1 << (plexRow+12)) | (4092 & ~ledRows[plexRow]);
+     dataToSend[1] = (byte)(dataToBuild & 0xff);  //convert short into two bytes
      dataToSend[0] = (byte)((dataToBuild >> 8) & 0xff);
-     //convert short into two bytes
-     //ret[0] = (byte)(x & 0xff);
-     //ret[1] = (byte)((x >> 8) & 0xff);
+   }
+  /* else
+   {
+     dataToBuild =  4092;
+     dataToSend[1] = (byte)(dataToBuild & 0xff);  //convert short into two bytes
+     dataToSend[0] = (byte)((dataToBuild >> 8) & 0xff);
+   }*/
+    //Original example code that was in nested for loops for i and j in a 4 x 4 matrix
     //dataToSend[0] = (1 << (i+4)) | (15 & ~(1 << j));//preprare byte (series of 8 bits) to send to 74HC595
-  
     //for example when i =2, j = 3,
     //dataToSend = (1 << 6) | (15 & ~(1 << 3));
     //dataToSend = 01000000 | (15 & ~(00001000));
@@ -99,8 +218,10 @@ void processLEDplex() {
     shiftOut(dataPin, clockPin, LSBFIRST, dataToSend[0]);
     //set latch pin high- this sends data to outputs so the LEDs will light up
     digitalWrite(latchPin, HIGH);
-  }
-  //delay(500);
+  
+
+  // delay(1);
+  
 }
 
 void printBinByte(byte n){

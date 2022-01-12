@@ -110,7 +110,7 @@ void serviceKeyboardMatrix() {
       }
     }
   }
-
+ 
   if (kpdB.getKeys())
   {
     for (int i=0; i<LIST_MAX; i++)   // Scan the whole key list.  LIST_MAX

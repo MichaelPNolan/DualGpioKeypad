@@ -16,8 +16,11 @@
 
 //#include "MIDIUSB.h"   if i want to use a USB enabled controller - future use
 
-//#define MIDI_SERIAL_MODE
-long counter = 0;
+#define MIDI_SERIAL_MODE
+
+unsigned long myTime, prevTime, nextTime, effectDelay, ledScan, keyScan;
+
+int timer1_counter;
 
 void setup(){
   #ifdef MIDI_SERIAL_MODE    
@@ -26,34 +29,47 @@ void setup(){
   Serial.begin(9600);
   Serial.println("serial ready");
   #endif
-
+  
+  
   setupLEDplex();
   setupKeyboard();
   //scan();
+  sweepEffectStart();
+  myTime = millis();
+  prevTime = myTime;
+  ledScan = myTime + 20;
+  effectDelay = myTime + 8000;
+  keyScan = myTime + 22;
   
-
 }
-  
-void loop(){
- //serviceKeyboardMatrix();
- if(counter > 12000){
-   
-   ledAllOff();
-   for(int i=0;i<10;i++)
-     ledMatrixOn(random(40));
-
-   //ledMatrixOff(random(40));
-   counter = 0;
- } else {
-   counter++; 
-   //delay(1);
- }
- if(counter % 20)
-   processLEDplex();
-// if(counter%2000)
-  //  ledMatrixOff(random(40));
 
  
+void loop(){
+ myTime = millis();
+ if(effectDelay < myTime){
+   //sweepEffectStart();
+   KnightRiderStart();
+   ledAllOff();
+   //for(int i=0;i<10;i++)
+   //  ledMatrixOn(random(40));
+
+   //ledMatrixOff(random(40));
+   effectDelay = myTime + 4000;
+ } 
+ 
+// if(ledScan < myTime){  // moved into an interrupt in the LED-mplex595 lib
+//   processLEDplex();
+//   ledScan = myTime + 10;
+ //}
+  //if(keyScan < myTime){
+   serviceKeyboardMatrix();
+   //keyScan = myTime + 22;
+// }
+ 
+  if((myTime - prevTime) > 50){ //process effects per 100 milliseconds
+    effects();
+    prevTime = myTime;
+  }
 }
 
 void playMIDINote(byte channel, byte note, byte velocity)
